@@ -27,7 +27,6 @@ import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.hep.HepPlanner;
 import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.plan.hep.HepRelVertex;
-import org.apache.calcite.rel.BiRel;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelShuttleImpl;
@@ -77,7 +76,6 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.util.Bug;
-import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Litmus;
 import org.apache.calcite.util.Pair;
@@ -105,11 +103,9 @@ import com.google.common.collect.SortedSetMultimap;
 import org.slf4j.Logger;
 
 import java.math.BigDecimal;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -2380,12 +2376,12 @@ public class RelDecorrelator implements ReflectiveVisitor {
       super(
           flavor
               ? operand(LogicalCorrelate.class,
-                  operand(RelNode.class, any()),
-                      operand(LogicalProject.class,
-                          operand(LogicalAggregate.class, any())))
+              operand(RelNode.class, any()),
+              operand(LogicalProject.class,
+                  operand(LogicalAggregate.class, any())))
               : operand(LogicalCorrelate.class,
                   operand(RelNode.class, any()),
-                      operand(LogicalAggregate.class, any())),
+                  operand(LogicalAggregate.class, any())),
           relBuilderFactory, null);
       this.flavor = flavor;
     }
@@ -2637,7 +2633,7 @@ public class RelDecorrelator implements ReflectiveVisitor {
           && mapRefRelToCorRef.equals(((CorelMap) obj).mapRefRelToCorRef)
           && mapCorToCorRel.equals(((CorelMap) obj).mapCorToCorRel)
           && mapFieldAccessToCorRef.equals(
-              ((CorelMap) obj).mapFieldAccessToCorRef);
+          ((CorelMap) obj).mapFieldAccessToCorRef);
     }
 
     @Override public int hashCode() {
@@ -2681,10 +2677,7 @@ public class RelDecorrelator implements ReflectiveVisitor {
 
     final Map<RexFieldAccess, CorRef> mapFieldAccessToCorVar = new HashMap<>();
 
-    final Holder<Integer> offset = Holder.of(0);
     int corrIdGenerator = 0;
-
-    final Deque<RelNode> stack = new ArrayDeque<>();
 
     /** Creates a CorelMap by iterating over a {@link RelNode} tree. */
     CorelMap build(RelNode... rels) {
@@ -2695,55 +2688,26 @@ public class RelDecorrelator implements ReflectiveVisitor {
           mapFieldAccessToCorVar);
     }
 
-    @Override public RelNode visit(LogicalJoin join) {
-      try {
-        stack.push(join);
-        join.getCondition().accept(rexVisitor(join));
-      } finally {
-        stack.pop();
-      }
-      return visitJoin(join);
+    @Override public boolean doVisit(LogicalJoin join) {
+      join.getCondition().accept(rexVisitor(join));
+      return true;
     }
 
-    @Override protected RelNode visitChild(RelNode parent, int i,
-        RelNode input) {
-      return super.visitChild(parent, i, stripHep(input));
-    }
-
-    @Override public RelNode visit(LogicalCorrelate correlate) {
+    @Override public boolean doVisit(LogicalCorrelate correlate) {
       mapCorToCorRel.put(correlate.getCorrelationId(), correlate);
-      return visitJoin(correlate);
+      return true;
     }
 
-    private RelNode visitJoin(BiRel join) {
-      final int x = offset.get();
-      visitChild(join, 0, join.getLeft());
-      offset.set(x + join.getLeft().getRowType().getFieldCount());
-      visitChild(join, 1, join.getRight());
-      offset.set(x);
-      return join;
+    @Override public boolean doVisit(LogicalFilter filter) {
+      filter.getCondition().accept(rexVisitor(filter));
+      return true;
     }
 
-    @Override public RelNode visit(final LogicalFilter filter) {
-      try {
-        stack.push(filter);
-        filter.getCondition().accept(rexVisitor(filter));
-      } finally {
-        stack.pop();
+    @Override public boolean doVisit(LogicalProject project) {
+      for (RexNode node : project.getProjects()) {
+        node.accept(rexVisitor(project));
       }
-      return super.visit(filter);
-    }
-
-    @Override public RelNode visit(LogicalProject project) {
-      try {
-        stack.push(project);
-        for (RexNode node : project.getProjects()) {
-          node.accept(rexVisitor(project));
-        }
-      } finally {
-        stack.pop();
-      }
-      return super.visit(project);
+      return true;
     }
 
     private RexVisitorImpl<Void> rexVisitor(final RelNode rel) {
@@ -2771,7 +2735,11 @@ public class RelDecorrelator implements ReflectiveVisitor {
         }
 
         @Override public Void visitSubQuery(RexSubQuery subQuery) {
-          subQuery.rel.accept(CorelMapBuilder.this);
+          CorelMapBuilder builder = new CorelMapBuilder();
+          subQuery.rel.accept(builder);
+          mapRefRelToCorRef.putAll(builder.mapRefRelToCorRef);
+          mapCorToCorRel.putAll(builder.mapCorToCorRel);
+          mapFieldAccessToCorVar.putAll(builder.mapFieldAccessToCorVar);
           return super.visitSubQuery(subQuery);
         }
       };

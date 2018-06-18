@@ -71,9 +71,6 @@ public final class LogicalSort extends Sort {
         offset, fetch);
   }
 
-  @Override public RelNode accept(RelShuttle shuttle) {
-    return shuttle.visit(this);
-  }
 }
 
 // End LogicalSort.java

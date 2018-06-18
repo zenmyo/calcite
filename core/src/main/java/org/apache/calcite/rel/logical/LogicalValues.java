@@ -120,9 +120,6 @@ public class LogicalValues extends Values {
     return create(cluster, rowType, tuples);
   }
 
-  @Override public RelNode accept(RelShuttle shuttle) {
-    return shuttle.visit(this);
-  }
 }
 
 // End LogicalValues.java

@@ -72,9 +72,6 @@ public final class LogicalMinus extends Minus {
     return new LogicalMinus(getCluster(), traitSet, inputs, all);
   }
 
-  @Override public RelNode accept(RelShuttle shuttle) {
-    return shuttle.visit(this);
-  }
 }
 
 // End LogicalMinus.java

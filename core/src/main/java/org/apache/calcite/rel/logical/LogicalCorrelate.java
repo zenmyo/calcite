@@ -113,9 +113,6 @@ public final class LogicalCorrelate extends Correlate {
         correlationId, requiredColumns, joinType);
   }
 
-  @Override public RelNode accept(RelShuttle shuttle) {
-    return shuttle.visit(this);
-  }
 }
 
 // End LogicalCorrelate.java

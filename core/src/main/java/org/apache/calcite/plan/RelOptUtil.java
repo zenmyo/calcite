@@ -18,10 +18,10 @@ package org.apache.calcite.plan;
 
 import org.apache.calcite.avatica.AvaticaConnection;
 import org.apache.calcite.linq4j.Ord;
-import org.apache.calcite.rel.RelHomogeneousShuttle;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.RelShuttle;
+import org.apache.calcite.rel.RelShuttleImpl;
 import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.core.AggregateCall;
@@ -3761,17 +3761,21 @@ public abstract class RelOptUtil {
   /** Shuttle that finds correlation variables inside a given relational
    * expression, including those that are inside
    * {@link RexSubQuery sub-queries}. */
-  private static class CorrelationCollector extends RelHomogeneousShuttle {
+  private static class CorrelationCollector extends RelShuttleImpl {
     private final VariableUsedVisitor vuv = new VariableUsedVisitor(this);
 
-    @Override public RelNode visit(RelNode other) {
+    @Override public boolean switchVisit(RelNode other) {
       other.collectVariablesUsed(vuv.variables);
       other.accept(vuv);
-      RelNode result = super.visit(other);
+      return super.switchVisit(other);
+    }
+
+    @Override public RelNode switchLeave(RelNode other) {
       // Important! Remove stopped variables AFTER we visit
       // children. (which what super.visit() does)
+      other = super.switchLeave(other);
       vuv.variables.removeAll(other.getVariablesSet());
-      return result;
+      return other;
     }
   }
 

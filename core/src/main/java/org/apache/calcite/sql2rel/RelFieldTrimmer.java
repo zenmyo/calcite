@@ -200,16 +200,15 @@ public class RelFieldTrimmer implements ReflectiveVisitor {
     // fields.
     for (final CorrelationId correlation : rel.getVariablesSet()) {
       rel.accept(
-          new CorrelationReferenceFinder() {
-            protected RexNode handle(RexFieldAccess fieldAccess) {
-              final RexCorrelVariable v =
-                  (RexCorrelVariable) fieldAccess.getReferenceExpr();
-              if (v.id.equals(correlation)) {
-                fieldsUsedBuilder.set(fieldAccess.getField().getIndex());
-              }
-              return fieldAccess;
+          new CorrelationReferenceFinder((fieldAccess) -> {
+            final RexCorrelVariable v =
+                (RexCorrelVariable) fieldAccess.getReferenceExpr();
+            if (v.id.equals(correlation)) {
+              fieldsUsedBuilder.set(fieldAccess.getField().getIndex());
             }
-          });
+            return fieldAccess;
+          }
+          ));
     }
 
     return dispatchTrimFields(input, fieldsUsedBuilder.build(), extraFields);
@@ -295,29 +294,27 @@ public class RelFieldTrimmer implements ReflectiveVisitor {
     final RexBuilder rexBuilder = relBuilder.getRexBuilder();
     for (final CorrelationId correlation : r.getVariablesSet()) {
       r = r.accept(
-          new CorrelationReferenceFinder() {
-            protected RexNode handle(RexFieldAccess fieldAccess) {
-              final RexCorrelVariable v =
-                  (RexCorrelVariable) fieldAccess.getReferenceExpr();
-              if (v.id.equals(correlation)
-                  && v.getType().getFieldCount() == mapping.getSourceCount()) {
-                final int old = fieldAccess.getField().getIndex();
-                final int new_ = mapping.getTarget(old);
-                final RelDataTypeFactory.Builder typeBuilder =
-                    relBuilder.getTypeFactory().builder();
-                for (int target : Util.range(mapping.getTargetCount())) {
-                  typeBuilder.add(
-                      v.getType().getFieldList().get(mapping.getSource(target)));
-                }
-                final RexNode newV =
-                    rexBuilder.makeCorrel(typeBuilder.build(), v.id);
-                if (old != new_) {
-                  return rexBuilder.makeFieldAccess(newV, new_);
-                }
+          new CorrelationReferenceFinder((fieldAccess) -> {
+            final RexCorrelVariable v =
+                (RexCorrelVariable) fieldAccess.getReferenceExpr();
+            if (v.id.equals(correlation)
+                && v.getType().getFieldCount() == mapping.getSourceCount()) {
+              final int old = fieldAccess.getField().getIndex();
+              final int new_ = mapping.getTarget(old);
+              final RelDataTypeFactory.Builder typeBuilder =
+                  relBuilder.getTypeFactory().builder();
+              for (int target : Util.range(mapping.getTargetCount())) {
+                typeBuilder.add(
+                    v.getType().getFieldList().get(mapping.getSource(target)));
               }
-              return fieldAccess;
+              final RexNode newV =
+                  rexBuilder.makeCorrel(typeBuilder.build(), v.id);
+              if (old != new_) {
+                return rexBuilder.makeFieldAccess(newV, new_);
+              }
             }
-          });
+            return fieldAccess;
+          }));
     }
     return new TrimResult(r, mapping);
   }

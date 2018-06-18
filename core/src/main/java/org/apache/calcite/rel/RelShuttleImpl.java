@@ -16,7 +16,6 @@
  */
 package org.apache.calcite.rel;
 
-import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.rel.core.TableFunctionScan;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.logical.LogicalAggregate;
@@ -44,92 +43,231 @@ import java.util.List;
  * any children change.
  */
 public class RelShuttleImpl implements RelShuttle {
-  protected final Deque<RelNode> stack = new ArrayDeque<>();
+  protected final Deque<List<RelNode>> childrenStack = new ArrayDeque<>();
 
-  /**
-   * Visits a particular child of a parent.
-   */
-  protected RelNode visitChild(RelNode parent, int i, RelNode child) {
-    stack.push(parent);
-    try {
-      RelNode child2 = child.accept(this);
-      if (child2 != child) {
-        final List<RelNode> newInputs = new ArrayList<>(parent.getInputs());
-        newInputs.set(i, child2);
-        return parent.copy(parent.getTraitSet(), newInputs);
-      }
-      return parent;
-    } finally {
-      stack.pop();
+  public boolean doVisit(LogicalAggregate aggregate) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalMatch match) {
+    return true;
+  }
+
+  public boolean doVisit(TableScan scan) {
+    return true;
+  }
+
+  public boolean doVisit(TableFunctionScan scan) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalValues values) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalFilter filter) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalProject project) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalJoin join) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalCorrelate correlate) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalUnion union) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalIntersect intersect) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalMinus minus) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalSort sort) {
+    return true;
+  }
+
+  public boolean doVisit(LogicalExchange exchange) {
+    return true;
+  }
+
+
+  public boolean visit(RelNode other) {
+    boolean proceed = switchVisit(other);
+    childrenStack.push(new ArrayList<>());
+    return proceed;
+  }
+
+  protected boolean switchVisit(RelNode other) {
+    if (other instanceof LogicalAggregate) {
+      return doVisit((LogicalAggregate) other);
     }
-  }
-
-  protected RelNode visitChildren(RelNode rel) {
-    for (Ord<RelNode> input : Ord.zip(rel.getInputs())) {
-      rel = visitChild(rel, input.i, input.e);
+    if (other instanceof LogicalMatch) {
+      return doVisit((LogicalMatch) other);
     }
-    return rel;
+    if (other instanceof TableScan) {
+      return doVisit((TableScan) other);
+    }
+    if (other instanceof TableFunctionScan) {
+      return doVisit((TableFunctionScan) other);
+    }
+    if (other instanceof LogicalValues) {
+      return doVisit((LogicalValues) other);
+    }
+    if (other instanceof LogicalFilter) {
+      return doVisit((LogicalFilter) other);
+    }
+    if (other instanceof LogicalProject) {
+      return doVisit((LogicalProject) other);
+    }
+    if (other instanceof LogicalJoin) {
+      return doVisit((LogicalJoin) other);
+    }
+    if (other instanceof LogicalCorrelate) {
+      return doVisit((LogicalCorrelate) other);
+    }
+    if (other instanceof LogicalUnion) {
+      return doVisit((LogicalUnion) other);
+    }
+    if (other instanceof LogicalIntersect) {
+      return doVisit((LogicalIntersect) other);
+    }
+    if (other instanceof LogicalMinus) {
+      return doVisit((LogicalMinus) other);
+    }
+    if (other instanceof LogicalSort) {
+      return doVisit((LogicalSort) other);
+    }
+    if (other instanceof LogicalExchange) {
+      return doVisit((LogicalExchange) other);
+    }
+    // TODO support unsupported node types
+    return true;
   }
 
-  public RelNode visit(LogicalAggregate aggregate) {
-    return visitChild(aggregate, 0, aggregate.getInput());
+  @Override public RelNode leave(RelNode other) {
+    List<RelNode> children = childrenStack.pop();
+    RelNode next = other.copy(other.getTraitSet(), children);
+    next = switchLeave(next);
+    if (!childrenStack.isEmpty()) {
+      childrenStack.peek().add(next);
+    }
+    return next;
   }
 
-  public RelNode visit(LogicalMatch match) {
-    return visitChild(match, 0, match.getInput());
+  protected RelNode switchLeave(RelNode other) {
+    if (other instanceof LogicalAggregate) {
+      return doLeave((LogicalAggregate) other);
+    }
+    if (other instanceof LogicalMatch) {
+      return doLeave((LogicalMatch) other);
+    }
+    if (other instanceof TableScan) {
+      return doLeave((TableScan) other);
+    }
+    if (other instanceof TableFunctionScan) {
+      return doLeave((TableFunctionScan) other);
+    }
+    if (other instanceof LogicalValues) {
+      return doLeave((LogicalValues) other);
+    }
+    if (other instanceof LogicalFilter) {
+      return doLeave((LogicalFilter) other);
+    }
+    if (other instanceof LogicalProject) {
+      return doLeave((LogicalProject) other);
+    }
+    if (other instanceof LogicalJoin) {
+      return doLeave((LogicalJoin) other);
+    }
+    if (other instanceof LogicalCorrelate) {
+      return doLeave((LogicalCorrelate) other);
+    }
+    if (other instanceof LogicalUnion) {
+      return doLeave((LogicalUnion) other);
+    }
+    if (other instanceof LogicalIntersect) {
+      return doLeave((LogicalIntersect) other);
+    }
+    if (other instanceof LogicalMinus) {
+      return doLeave((LogicalMinus) other);
+    }
+    if (other instanceof LogicalSort) {
+      return doLeave((LogicalSort) other);
+    }
+    if (other instanceof LogicalExchange) {
+      return doLeave((LogicalExchange) other);
+    }
+    // TODO support unsupported node types
+    return other;
   }
 
-  public RelNode visit(TableScan scan) {
+  public RelNode doLeave(LogicalAggregate aggregate) {
+    return aggregate;
+  }
+
+  public RelNode doLeave(LogicalMatch match) {
+    return match;
+  }
+
+  public RelNode doLeave(TableScan scan) {
     return scan;
   }
 
-  public RelNode visit(TableFunctionScan scan) {
-    return visitChildren(scan);
+  public RelNode doLeave(TableFunctionScan scan) {
+    return scan;
   }
 
-  public RelNode visit(LogicalValues values) {
+  public RelNode doLeave(LogicalValues values) {
     return values;
   }
 
-  public RelNode visit(LogicalFilter filter) {
-    return visitChild(filter, 0, filter.getInput());
+  public RelNode doLeave(LogicalFilter filter) {
+    return filter;
   }
 
-  public RelNode visit(LogicalProject project) {
-    return visitChild(project, 0, project.getInput());
+  public RelNode doLeave(LogicalProject project) {
+    return project;
   }
 
-  public RelNode visit(LogicalJoin join) {
-    return visitChildren(join);
+  public RelNode doLeave(LogicalJoin join) {
+    return join;
   }
 
-  public RelNode visit(LogicalCorrelate correlate) {
-    return visitChildren(correlate);
+  public RelNode doLeave(LogicalCorrelate correlate) {
+    return correlate;
   }
 
-  public RelNode visit(LogicalUnion union) {
-    return visitChildren(union);
+  public RelNode doLeave(LogicalUnion union) {
+    return union;
   }
 
-  public RelNode visit(LogicalIntersect intersect) {
-    return visitChildren(intersect);
+  public RelNode doLeave(LogicalIntersect intersect) {
+    return intersect;
   }
 
-  public RelNode visit(LogicalMinus minus) {
-    return visitChildren(minus);
+  public RelNode doLeave(LogicalMinus minus) {
+    return minus;
   }
 
-  public RelNode visit(LogicalSort sort) {
-    return visitChildren(sort);
+  public RelNode doLeave(LogicalSort sort) {
+    return sort;
   }
 
-  public RelNode visit(LogicalExchange exchange) {
-    return visitChildren(exchange);
+  public RelNode doLeave(LogicalExchange exchange) {
+    return exchange;
   }
 
-  public RelNode visit(RelNode other) {
-    return visitChildren(other);
-  }
 }
 
 // End RelShuttleImpl.java

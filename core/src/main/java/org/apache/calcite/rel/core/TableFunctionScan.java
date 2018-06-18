@@ -22,6 +22,7 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.AbstractRelNode;
 import org.apache.calcite.rel.RelInput;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelShuttle;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.metadata.RelColumnMapping;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -145,6 +146,15 @@ public abstract class TableFunctionScan extends AbstractRelNode {
         columnMappings);
   }
 
+  @Override public RelNode accept(final RelShuttle shuttle) {
+    if (shuttle.visit(this)) {
+      for (RelNode child : inputs) {
+        child.accept(shuttle);
+      }
+    }
+    return shuttle.leave(this);
+  }
+
   @Override public void replaceInput(int ordinalInParent, RelNode p) {
     final List<RelNode> newInputs = new ArrayList<>(inputs);
     newInputs.set(ordinalInParent, p);
@@ -190,7 +200,7 @@ public abstract class TableFunctionScan extends AbstractRelNode {
       pw.input("input#" + ord.i, ord.e);
     }
     pw.item("invocation", rexCall)
-      .item("rowType", rowType);
+        .item("rowType", rowType);
     if (elementType != null) {
       pw.item("elementType", elementType);
     }

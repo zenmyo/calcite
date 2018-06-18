@@ -46,6 +46,14 @@ public abstract class BiRel extends AbstractRelNode {
     visitor.visit(right, 1, this);
   }
 
+  @Override public RelNode accept(final RelShuttle shuttle) {
+    if (shuttle.visit(this)) {
+      left.accept(shuttle);
+      right.accept(shuttle);
+    }
+    return shuttle.leave(this);
+  }
+
   public List<RelNode> getInputs() {
     return FlatLists.of(left, right);
   }

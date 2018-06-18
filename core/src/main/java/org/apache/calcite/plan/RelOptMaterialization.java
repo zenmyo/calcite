@@ -93,7 +93,7 @@ public class RelOptMaterialization {
     assert starTable != null;
     RelNode rel2 = rel.accept(
         new RelShuttleImpl() {
-          @Override public RelNode visit(TableScan scan) {
+          @Override public RelNode doLeave(TableScan scan) {
             RelOptTable relOptTable = scan.getTable();
             final Table table = relOptTable.unwrap(Table.class);
             if (table.equals(starTable.tables.get(0))) {
@@ -111,9 +111,8 @@ public class RelOptMaterialization {
             return scan;
           }
 
-          @Override public RelNode visit(LogicalJoin join) {
+          @Override public RelNode doLeave(LogicalJoin join) {
             for (;;) {
-              RelNode rel = super.visit(join);
               if (rel == join || !(rel instanceof LogicalJoin)) {
                 return rel;
               }

@@ -16,8 +16,8 @@
  */
 package org.apache.calcite.sql2rel;
 
-import org.apache.calcite.rel.RelHomogeneousShuttle;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelShuttleImpl;
 import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCorrelVariable;
@@ -31,7 +31,7 @@ import com.google.common.collect.ImmutableSet;
  * Rewrites relations to ensure the same correlation is referenced by the same
  * correlation variable.
  */
-public class DeduplicateCorrelateVariables extends RelHomogeneousShuttle {
+public class DeduplicateCorrelateVariables extends RelShuttleImpl {
   private final RexShuttle dedupRex;
 
   /** Creates a DeduplicateCorrelateVariables. */
@@ -52,9 +52,8 @@ public class DeduplicateCorrelateVariables extends RelHomogeneousShuttle {
             ImmutableSet.copyOf(alternateIds)));
   }
 
-  @Override public RelNode visit(RelNode other) {
-    RelNode next = super.visit(other);
-    return next.accept(dedupRex);
+  @Override public RelNode switchLeave(RelNode other) {
+    return other.accept(dedupRex);
   }
 
   /**
