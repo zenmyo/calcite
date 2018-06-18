@@ -55,8 +55,9 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -87,19 +88,6 @@ public class MongoAdapterTest implements SchemaFactory {
     populate(database.getCollection("store"), FoodmartJson.class.getResource("/store.json"));
     populate(database.getCollection("warehouse"),
             FoodmartJson.class.getResource("/warehouse.json"));
-
-    // Manually insert data for data-time test.
-    MongoCollection<BsonDocument> datatypes =  database.getCollection("datatypes")
-            .withDocumentClass(BsonDocument.class);
-    if (datatypes.count() > 0) {
-      datatypes.deleteMany(new BsonDocument());
-    }
-    BsonDocument doc = new BsonDocument();
-    Date date = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse("2012-09-05");
-    doc.put("date", new BsonDateTime(date.getTime()));
-    doc.put("value", new BsonInt32(1231));
-    doc.put("ownerId", new BsonString("531e7789e4b0853ddb861313"));
-    datatypes.insertOne(doc);
 
     schema = new MongoSchema(database);
   }
@@ -594,12 +582,13 @@ public class MongoAdapterTest implements SchemaFactory {
             .query("select state, count(distinct city) as cdc\n"
                     + "from zips\n"
                     + "group by state\n"
-                    + "order by cdc desc limit 5")
-            .returns("STATE=VA; CDC=3\n"
-                    + "STATE=NY; CDC=3\n"
-                    + "STATE=SC; CDC=3\n"
-                    + "STATE=RI; CDC=3\n"
-                    + "STATE=WV; CDC=3\n")
+                    + "order by cdc desc, state" // sort by state to make result more deterministic
+                    + " limit 5")
+            .returns("STATE=AK; CDC=3\n"
+                    + "STATE=AL; CDC=3\n"
+                    + "STATE=AR; CDC=3\n"
+                    + "STATE=AZ; CDC=3\n"
+                    + "STATE=CA; CDC=3\n")
             .queryContains(
                     mongoChecker(
                             "{$project: {CITY: '$city', STATE: '$state'}}",
@@ -607,7 +596,7 @@ public class MongoAdapterTest implements SchemaFactory {
                             "{$project: {_id: 0, CITY: '$_id.CITY', STATE: '$_id.STATE'}}",
                             "{$group: {_id: '$STATE', CDC: {$sum: {$cond: [ {$eq: ['CITY', null]}, 0, 1]}}}}",
                             "{$project: {STATE: '$_id', CDC: '$CDC'}}",
-                            "{$sort: {CDC: -1}}",
+                            "{$sort: {CDC: -1, STATE: 1}}",
                             "{$limit: 5}"));
   }
 
@@ -706,6 +695,21 @@ public class MongoAdapterTest implements SchemaFactory {
     //     "value" : 1231,
     //     "ownerId" : "531e7789e4b0853ddb861313"
     //   } )
+
+    // Manually insert data for data-time test.
+    MongoCollection<BsonDocument> datatypes =  RULE.database().getCollection("datatypes")
+            .withDocumentClass(BsonDocument.class);
+    if (datatypes.count() > 0) {
+      datatypes.deleteMany(new BsonDocument());
+    }
+    BsonDocument doc = new BsonDocument();
+    // mongo stores timestamps in UTC
+    Instant instant = LocalDate.of(2012, 9, 5).atStartOfDay(ZoneOffset.UTC).toInstant();
+    doc.put("date", new BsonDateTime(instant.toEpochMilli()));
+    doc.put("value", new BsonInt32(1231));
+    doc.put("ownerId", new BsonString("531e7789e4b0853ddb861313"));
+    datatypes.insertOne(doc);
+
     assertModel("{\n"
             + "  version: '1.0',\n"
             + "  defaultSchema: 'test',\n"
