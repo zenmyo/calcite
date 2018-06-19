@@ -134,7 +134,7 @@ class CalciteMaterializer extends CalcitePrepareImpl.CalcitePreparingStmt {
    * expression unchanged. It does not visit inputs. */
   static class RelNullShuttle implements RelShuttle {
     public boolean visit(RelNode other) {
-      return true;
+      return false;
     }
     public RelNode leave(RelNode other) {
       return other;

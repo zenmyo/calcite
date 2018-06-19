@@ -63,6 +63,11 @@ public class CorrelationReferenceFinder extends RelShuttleImpl {
     }
 
     @Override public RexNode visitSubQuery(RexSubQuery subQuery) {
+      CorrelationReferenceFinder finder = new CorrelationReferenceFinder(handler);
+      final RelNode r = subQuery.rel.accept(finder);
+      if (r != subQuery.rel) {
+        subQuery = subQuery.clone(r);
+      }
       return super.visitSubQuery(subQuery);
     }
   }

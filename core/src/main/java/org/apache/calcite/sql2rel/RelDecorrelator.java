@@ -98,7 +98,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import com.google.common.collect.Sets;
-import com.google.common.collect.SortedSetMultimap;
 
 import org.slf4j.Logger;
 
@@ -116,6 +115,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
+
 import javax.annotation.Nonnull;
 
 /**
@@ -2607,18 +2607,20 @@ public class RelDecorrelator implements ReflectiveVisitor {
    *
    * </ol> */
   private static class CorelMap {
-    private final Multimap<RelNode, CorRef> mapRefRelToCorRef;
-    private final SortedMap<CorrelationId, RelNode> mapCorToCorRel;
-    private final Map<RexFieldAccess, CorRef> mapFieldAccessToCorRef;
+    private final Multimap<RelNode, CorRef> mapRefRelToCorRef =
+        Multimaps.newSortedSetMultimap(
+            new HashMap<RelNode, Collection<CorRef>>(),
+            new Supplier<TreeSet<CorRef>>() {
+              public TreeSet<CorRef> get() {
+                Bug.upgrade("use MultimapBuilder when we're on Guava-16");
+                return Sets.newTreeSet();
+              }
+            });
+    private final SortedMap<CorrelationId, RelNode> mapCorToCorRel = new TreeMap<>();
 
-    // TODO: create immutable copies of all maps
-    private CorelMap(Multimap<RelNode, CorRef> mapRefRelToCorRef,
-        SortedMap<CorrelationId, RelNode> mapCorToCorRel,
-        Map<RexFieldAccess, CorRef> mapFieldAccessToCorRef) {
-      this.mapRefRelToCorRef = mapRefRelToCorRef;
-      this.mapCorToCorRel = mapCorToCorRel;
-      this.mapFieldAccessToCorRef = ImmutableMap.copyOf(mapFieldAccessToCorRef);
-    }
+    private final Map<RexFieldAccess, CorRef> mapFieldAccessToCorRef = new HashMap<>();
+
+    int corrIdGenerator = 0;
 
     @Override public String toString() {
       return "mapRefRelToCorRef=" + mapRefRelToCorRef
@@ -2641,15 +2643,6 @@ public class RelDecorrelator implements ReflectiveVisitor {
           mapFieldAccessToCorRef);
     }
 
-    /** Creates a CorelMap with given contents. */
-    public static CorelMap of(
-        SortedSetMultimap<RelNode, CorRef> mapRefRelToCorVar,
-        SortedMap<CorrelationId, RelNode> mapCorToCorRel,
-        Map<RexFieldAccess, CorRef> mapFieldAccessToCorVar) {
-      return new CorelMap(mapRefRelToCorVar, mapCorToCorRel,
-          mapFieldAccessToCorVar);
-    }
-
     /**
      * Returns whether there are any correlating variables in this statement.
      *
@@ -2662,30 +2655,31 @@ public class RelDecorrelator implements ReflectiveVisitor {
 
   /** Builds a {@link org.apache.calcite.sql2rel.RelDecorrelator.CorelMap}. */
   private static class CorelMapBuilder extends RelShuttleImpl {
-    final SortedMap<CorrelationId, RelNode> mapCorToCorRel =
-        new TreeMap<>();
 
-    final SortedSetMultimap<RelNode, CorRef> mapRefRelToCorRef =
-        Multimaps.newSortedSetMultimap(
-            new HashMap<RelNode, Collection<CorRef>>(),
-            new Supplier<TreeSet<CorRef>>() {
-              public TreeSet<CorRef> get() {
-                Bug.upgrade("use MultimapBuilder when we're on Guava-16");
-                return Sets.newTreeSet();
-              }
-            });
+    private CorelMap map;
 
-    final Map<RexFieldAccess, CorRef> mapFieldAccessToCorVar = new HashMap<>();
+    CorelMapBuilder() {
+      this.map = new CorelMap();
+    }
 
-    int corrIdGenerator = 0;
+    CorelMapBuilder(CorelMap map) {
+      this.map = map;
+    }
 
     /** Creates a CorelMap by iterating over a {@link RelNode} tree. */
     CorelMap build(RelNode... rels) {
       for (RelNode rel : rels) {
         stripHep(rel).accept(this);
       }
-      return new CorelMap(mapRefRelToCorRef, mapCorToCorRel,
-          mapFieldAccessToCorVar);
+      return map;
+    }
+
+    @Override public boolean visit(final RelNode other) {
+      return super.visit(stripHep(other));
+    }
+
+    @Override public RelNode leave(final RelNode other) {
+      return super.leave(stripHep(other));
     }
 
     @Override public boolean doVisit(LogicalJoin join) {
@@ -2694,7 +2688,7 @@ public class RelDecorrelator implements ReflectiveVisitor {
     }
 
     @Override public boolean doVisit(LogicalCorrelate correlate) {
-      mapCorToCorRel.put(correlate.getCorrelationId(), correlate);
+      map.mapCorToCorRel.put(correlate.getCorrelationId(), correlate);
       return true;
     }
 
@@ -2716,30 +2710,27 @@ public class RelDecorrelator implements ReflectiveVisitor {
           final RexNode ref = fieldAccess.getReferenceExpr();
           if (ref instanceof RexCorrelVariable) {
             final RexCorrelVariable var = (RexCorrelVariable) ref;
-            if (mapFieldAccessToCorVar.containsKey(fieldAccess)) {
+            if (map.mapFieldAccessToCorRef.containsKey(fieldAccess)) {
               // for cases where different Rel nodes are referring to
               // same correlation var (e.g. in case of NOT IN)
               // avoid generating another correlation var
               // and record the 'rel' is using the same correlation
-              mapRefRelToCorRef.put(rel,
-                  mapFieldAccessToCorVar.get(fieldAccess));
+              map.mapRefRelToCorRef.put(rel,
+                  map.mapFieldAccessToCorRef.get(fieldAccess));
             } else {
               final CorRef correlation =
                   new CorRef(var.id, fieldAccess.getField().getIndex(),
-                      corrIdGenerator++);
-              mapFieldAccessToCorVar.put(fieldAccess, correlation);
-              mapRefRelToCorRef.put(rel, correlation);
+                      map.corrIdGenerator++);
+              map.mapFieldAccessToCorRef.put(fieldAccess, correlation);
+              map.mapRefRelToCorRef.put(rel, correlation);
             }
           }
           return super.visitFieldAccess(fieldAccess);
         }
 
         @Override public Void visitSubQuery(RexSubQuery subQuery) {
-          CorelMapBuilder builder = new CorelMapBuilder();
+          CorelMapBuilder builder = new CorelMapBuilder(map);
           subQuery.rel.accept(builder);
-          mapRefRelToCorRef.putAll(builder.mapRefRelToCorRef);
-          mapCorToCorRel.putAll(builder.mapCorToCorRel);
-          mapFieldAccessToCorVar.putAll(builder.mapFieldAccessToCorVar);
           return super.visitSubQuery(subQuery);
         }
       };

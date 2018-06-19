@@ -93,6 +93,9 @@ public class RelOptMaterialization {
     assert starTable != null;
     RelNode rel2 = rel.accept(
         new RelShuttleImpl() {
+
+          private Util.FoundOne e = null;
+
           @Override public RelNode doLeave(TableScan scan) {
             RelOptTable relOptTable = scan.getTable();
             final Table table = relOptTable.unwrap(Table.class);
@@ -111,31 +114,44 @@ public class RelOptMaterialization {
             return scan;
           }
 
-          @Override public RelNode doLeave(LogicalJoin join) {
-            for (;;) {
-              if (rel == join || !(rel instanceof LogicalJoin)) {
-                return rel;
-              }
-              join = (LogicalJoin) rel;
-              final ProjectFilterTable left =
-                  ProjectFilterTable.of(join.getLeft());
-              if (left != null) {
-                final ProjectFilterTable right =
-                    ProjectFilterTable.of(join.getRight());
-                if (right != null) {
-                  try {
-                    match(left, right, join.getCluster());
-                  } catch (Util.FoundOne e) {
-                    return (RelNode) e.getNode();
-                  }
+          @Override public boolean doVisit(LogicalJoin join) {
+            if (rel == join || !(rel instanceof LogicalJoin)) {
+              this.e = null;
+              return false;
+            }
+            join = (LogicalJoin) rel;
+            final ProjectFilterTable left =
+                ProjectFilterTable.of(join.getLeft());
+            if (left != null) {
+              final ProjectFilterTable right =
+                  ProjectFilterTable.of(join.getRight());
+              if (right != null) {
+                try {
+                  match(left, right, join.getCluster());
+                } catch (Util.FoundOne e) {
+                  this.e = e;
+                  return false;
                 }
               }
             }
+            return true;
           }
 
-          /** Throws a {@link org.apache.calcite.util.Util.FoundOne} containing
-           * a {@link org.apache.calcite.rel.logical.LogicalTableScan} on
-           * success.  (Yes, an exception for normal operation.) */
+          @Override public RelNode doLeave(LogicalJoin join) {
+            if (rel == join || !(rel instanceof LogicalJoin)) {
+              return rel;
+            }
+            if (e != null) {
+              return (RelNode) e.getNode();
+            }
+            return join;
+          }
+
+
+
+            /** Throws a {@link org.apache.calcite.util.Util.FoundOne} containing
+             * a {@link org.apache.calcite.rel.logical.LogicalTableScan} on
+             * success.  (Yes, an exception for normal operation.) */
           private void match(ProjectFilterTable left, ProjectFilterTable right,
               RelOptCluster cluster) {
             final Mappings.TargetMapping leftMapping = left.mapping();

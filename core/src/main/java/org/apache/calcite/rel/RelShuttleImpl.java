@@ -43,7 +43,10 @@ import java.util.List;
  * any children change.
  */
 public class RelShuttleImpl implements RelShuttle {
+
   protected final Deque<List<RelNode>> childrenStack = new ArrayDeque<>();
+
+  protected final Deque<Boolean> proceedFlagStack = new ArrayDeque<>();
 
   public boolean doVisit(LogicalAggregate aggregate) {
     return true;
@@ -105,6 +108,7 @@ public class RelShuttleImpl implements RelShuttle {
   public boolean visit(RelNode other) {
     boolean proceed = switchVisit(other);
     childrenStack.push(new ArrayList<>());
+    proceedFlagStack.push(proceed);
     return proceed;
   }
 
@@ -157,7 +161,13 @@ public class RelShuttleImpl implements RelShuttle {
 
   @Override public RelNode leave(RelNode other) {
     List<RelNode> children = childrenStack.pop();
-    RelNode next = other.copy(other.getTraitSet(), children);
+    boolean proceeded = proceedFlagStack.pop();
+    RelNode next;
+    if (!proceeded || other instanceof TableScan || other instanceof LogicalValues) {
+      next = other;
+    } else {
+      next = other.copy(other.getTraitSet(), children);
+    }
     next = switchLeave(next);
     if (!childrenStack.isEmpty()) {
       childrenStack.peek().add(next);
